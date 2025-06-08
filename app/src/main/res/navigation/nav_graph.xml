@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/profileListFragment"> <!-- Updated startDestination -->
+
+    <fragment
+        android:id="@+id/profileListFragment" <!-- Updated ID -->
+        android:name="com.example.sshinjector.ui.profiles.ProfileListFragment"
+        android:label="SSH Profiles"
+        tools:layout="@layout/fragment_profile_list" >
+        <action
+            android:id="@+id/action_profileListFragment_to_addEditProfileDialog" <!-- Updated ID -->
+            app:destination="@id/addEditProfileDialog" />
+    </fragment>
+
+    <dialog
+        android:id="@+id/addEditProfileDialog" <!-- Updated ID -->
+        android:name="com.example.sshinjector.ui.profiles.AddEditProfileDialog"
+        android:label="@string/dialog_title_add_profile" <!-- Use string resource -->
+        tools:layout="@layout/dialog_add_edit_profile" >
+        <argument
+            android:name="profileId"
+            app:argType="long"
+            android:defaultValue="-1L" />
+    </dialog>
+</navigation>
