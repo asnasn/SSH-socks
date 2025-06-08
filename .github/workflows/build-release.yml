@@ -49,6 +49,19 @@ jobs:
       id: create_tag
       run: echo "::set-output name=tag_name::release-$(date +'%Y%m%d%H%M%S')-$(echo ${GITHUB_SHA} | cut -c1-7)"
 
+    # NOTE: If the 'Create GitHub Release' or 'Upload Release Asset' steps fail with
+    # "Error: Resource not accessible by integration", it usually means the default
+    # GITHUB_TOKEN does not have sufficient permissions.
+    # To resolve this:
+    # 1. Check repository settings: Go to Settings > Actions > General > Workflow permissions.
+    #    Ensure "Read and write permissions" is selected for GITHUB_TOKEN.
+    # 2. If the issue persists, or for more fine-grained control, create a Personal Access Token (PAT)
+    #    with 'repo' (or 'public_repo' for public repos) and 'workflow' scopes.
+    #    Store this PAT as a secret in the repository (e.g., `RELEASE_PAT`) and
+    #    use it in the `env` block for these steps:
+    #    env:
+    #      GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
+    #    Remember that using a PAT grants permissions based on the user who created it.
     - name: Create GitHub Release
       id: create_release
       uses: actions/create-release@v1

@@ -4,18 +4,17 @@ import com.example.sshinjector.model.SSHProfile
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import com.jcraft.jsch.ChannelShell
-import com.jcraft.jsch.UserInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.InputStream
-import java.io.OutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
 import java.util.Properties
+import java.io.IOException // Import IOException
 
 class SshConnectionManager(private val listener: SshConnectionListener) {
 
@@ -23,11 +22,14 @@ class SshConnectionManager(private val listener: SshConnectionListener) {
     private var shellChannel: ChannelShell? = null
     private var sessionScope = CoroutineScope(Dispatchers.IO + Job())
 
-    private var out: PipedOutputStream? = null // Data to SSH server
-    val terminalInputStream: InputStream by lazy { PipedInputStream(out) } // Data from SSH server (shell output)
+    // For writing to the shell's input (commands from UI)
+    private var shellPipedOutForCommands: PipedOutputStream? = null
 
-    private var shellIn: PipedInputStream? = null // To write to shell's input
-    private var shellOut: PipedOutputStream? = null // To connect to shell's input stream
+    // Internal streams for shell output processing
+    private var internalShellOutputReader: PipedInputStream? = null
+    private var internalShellOutputWriter: PipedOutputStream? = null
+    private var outputReadingJob: Job? = null
+
 
     init {
         JSch.setLogger(object : com.jcraft.jsch.Logger {
@@ -38,14 +40,15 @@ class SshConnectionManager(private val listener: SshConnectionListener) {
         })
     }
 
-    fun connect(profile: SSHProfile, decryptedPasswordOrKeyPath: String) {
+    fun connect(profile: SSHProfile, decryptedCredential: String) {
         if (session?.isConnected == true || shellChannel?.isConnected == true) {
             listener.onLogOutput("Already connected or connecting.")
             return
         }
 
-        sessionScope.cancel() // Cancel any previous scope
-        sessionScope = CoroutineScope(Dispatchers.IO + Job())
+        // Ensure previous connection resources are cleaned up, especially the scope and jobs
+        cleanupConnectionResources() // Call a new method to ensure old resources are fully reset
+        sessionScope = CoroutineScope(Dispatchers.IO + Job()) // Recreate the scope
 
         sessionScope.launch {
             listener.onStatusChanged(SshStatus.CONNECTING)
@@ -53,67 +56,69 @@ class SshConnectionManager(private val listener: SshConnectionListener) {
 
             try {
                 val jsch = JSch()
-                // TODO: Handle key-based authentication: jsch.addIdentity(keyPath, passphrase)
-                // For now, assuming password authentication or key path is the password field.
+
+                if (profile.isKeyBasedAuth) {
+                    listener.onLogOutput("Using key-based authentication.")
+                    val identityName = profile.profileName ?: "ssh_identity"
+                    try {
+                        jsch.addIdentity(
+                            identityName,
+                            decryptedCredential.toByteArray(Charsets.UTF_8),
+                            null,
+                            null
+                        )
+                        listener.onLogOutput("Identity '${identityName}' added.")
+                    } catch (e: Exception) {
+                        listener.onError("Failed to add SSH key: ${e.message}")
+                        e.printStackTrace()
+                        // No explicit disconnect() here as full cleanup is at the end of try-catch
+                        throw e // Propagate to outer catch for full cleanup
+                    }
+                }
 
                 session = jsch.getSession(profile.username, profile.host, profile.port)
-                session?.setPassword(decryptedPasswordOrKeyPath)
 
-                // Important: StrictHostKeyChecking
-                // For a real app, you'd want to allow user to verify host key or use known_hosts.
-                // For an injector-style app, often this is set to "no".
+                if (!profile.isKeyBasedAuth) {
+                    listener.onLogOutput("Using password-based authentication.")
+                    session?.setPassword(decryptedCredential)
+                }
+
                 val config = Properties()
                 config["StrictHostKeyChecking"] = "no"
-                config["PreferredAuthentications"] = "password,publickey,keyboard-interactive" // Adjust as needed
+                config["PreferredAuthentications"] = if (profile.isKeyBasedAuth) "publickey,password,keyboard-interactive" else "password,publickey,keyboard-interactive"
                 session?.setConfig(config)
-                session?.setConfig("ConnectTimeout", "10000") // 10 seconds timeout
+                session?.setConfig("ConnectTimeout", "10000")
 
-
-                session?.connect(15000) // 15 seconds connection timeout
+                session?.connect(15000)
 
                 if (session?.isConnected == true) {
                     listener.onLogOutput("SSH Session Connected.")
-                    listener.onStatusChanged(SshStatus.AUTHENTICATED) // Or CONNECTED if session implies full connection
+                    listener.onStatusChanged(SshStatus.AUTHENTICATED)
 
                     shellChannel = session?.openChannel("shell") as? ChannelShell
                     if (shellChannel == null) {
                         throw Exception("Failed to open shell channel.")
                     }
 
-                    // Setup PipedInput/OutputStreams for shell interaction
-                    // Data from shellChannel (remote) goes to terminalInputStream (local UI)
-                    val channelOut = PipedOutputStream()
-                    shellChannel!!.outputStream = channelOut // shell stdout -> channelOut
-                    // terminalInputStream = PipedInputStream(channelOut) // Already lazy initialized with 'out'
+                    // Setup internal pipes for shell output
+                    internalShellOutputReader = PipedInputStream(1024 * 8) // Buffer size for pipe
+                    internalShellOutputWriter = PipedOutputStream(internalShellOutputReader)
+                    shellChannel!!.outputStream = internalShellOutputWriter // Shell stdout -> internalShellOutputWriter
 
-                    // Data from local (UI command input) goes to shellChannel's input
-                    // This is for sending commands TO the shell
-                    shellIn = PipedInputStream()
-                    shellChannel!!.inputStream = shellIn // shell stdin <- shellIn
-                    shellOut = PipedOutputStream(shellIn)
+                    // Setup pipes for shell input (commands from UI)
+                    val pipedInForShellCommands = PipedInputStream() // Shell stdin reads from this
+                    shellPipedOutForCommands = PipedOutputStream(pipedInForShellCommands) // UI writes commands here
+                    shellChannel!!.inputStream = pipedInForShellCommands
 
+                    // shellChannel!!.setPtyType("xterm")
 
-                    // For reading from the shell and forwarding to listener
-                    // This PipedOutputStream is where the shell's output goes.
-                    // We need to connect it to the terminalInputStream that the UI will read.
-                    out = PipedOutputStream() // Data written here goes to terminalInputStream
-                    shellChannel!!.outputStream = out // Redirect shell output to 'out'
-
-                    // Set terminal type if needed
-                    // shellChannel!!.setPtyType("dumb") // or "ansi", "vt100", etc.
-
-                    shellChannel!!.connect(5000) // 5 seconds channel connect timeout
+                    shellChannel!!.connect(5000)
 
                     if (shellChannel!!.isConnected) {
                         listener.onLogOutput("Shell channel opened.")
                         listener.onStatusChanged(SshStatus.CHANNEL_OPEN)
-                        listener.onSessionConnected() // Notify fully connected and ready
-
-                        // Start a new coroutine to continuously read from the shell's output stream
-                        // and forward it to the listener. This part is tricky with PipedStreams
-                        // and blocking reads. A dedicated thread or non-blocking IO might be better
-                        // in a full implementation.
-                        // For now, the UI will be responsible for reading from terminalInputStream.
+                        startShellOutputReader() // Launch coroutine to read shell output
+                        listener.onSessionConnected()
                     } else {
                         throw Exception("Failed to connect shell channel.")
                     }
@@ -124,66 +129,108 @@ class SshConnectionManager(private val listener: SshConnectionListener) {
             } catch (e: Exception) {
                 listener.onError("Connection failed: ${e.message}")
                 listener.onLogOutput("Error: ${e.localizedMessage}")
-                e.printStackTrace()
-                disconnect() // Clean up
+                // e.printStackTrace() // Printing stack trace directly might be too verbose for UI log
+                disconnect() // Clean up on any exception during connect
+            }
+        }
+    }
+
+    private fun startShellOutputReader() {
+        outputReadingJob = sessionScope.launch(Dispatchers.IO) { // Ensure this is on an IO dispatcher
+            val buffer = ByteArray(1024)
+            var bytesRead: Int
+            try {
+                while (isActive && internalShellOutputReader != null &&
+                       (internalShellOutputReader!!.read(buffer).also { bytesRead = it }) != -1) {
+                    val output = String(buffer, 0, bytesRead, Charsets.UTF_8)
+                    listener.onLogOutput(output) // Or a new onTerminalData(output) method
+                }
+            } catch (e: IOException) {
+                if (isActive) { // Only log error if the scope is still active (i.e., not a planned disconnect)
+                    listener.onLogOutput("Shell output stream closed or error: ${e.message}")
+                }
+            } finally {
+                listener.onLogOutput("Shell output reader finished.")
+                // No need to close internalShellOutputReader here, disconnect() will handle it.
             }
         }
     }
 
     fun sendCommand(command: String) {
-        if (shellChannel?.isConnected == true && shellOut != null) {
-            sessionScope.launch {
+        if (shellChannel?.isConnected == true && shellPipedOutForCommands != null) {
+            sessionScope.launch(Dispatchers.IO) { // Ensure command sending is also on IO dispatcher
                 try {
-                    // Append newline as if typing in a terminal
                     val commandWithNewline = if (command.endsWith("\n")) command else "$command\n"
-                    shellOut!!.write(commandWithNewline.toByteArray(Charsets.UTF_8))
-                    shellOut!!.flush()
-                    listener.onLogOutput("Sent: ${command.trim()}")
+                    shellPipedOutForCommands!!.write(commandWithNewline.toByteArray(Charsets.UTF_8))
+                    shellPipedOutForCommands!!.flush()
+                    // Avoid logging "Sent:" here, let the shell echo confirm it via onLogOutput
+                    // listener.onLogOutput("Sent: ${command.trim()}")
                 } catch (e: Exception) {
                     listener.onError("Error sending command: ${e.message}")
-                    disconnect()
                 }
             }
         } else {
-            listener.onError("Not connected or shell output stream is null. Cannot send command.")
+            listener.onError("Not connected. Cannot send command.")
         }
+    }
+
+    private fun cleanupConnectionResources() {
+        outputReadingJob?.cancel() // Cancel previous reading job
+        outputReadingJob = null
+
+        try {
+            shellPipedOutForCommands?.close()
+            // PipedInputStream connected to shellPipedOutForCommands is managed by shellChannel
+        } catch (e: IOException) { /* ignore */ }
+        shellPipedOutForCommands = null
+
+        try {
+            internalShellOutputWriter?.close()
+        } catch (e: IOException) { /* ignore */ }
+        internalShellOutputWriter = null
+
+        try {
+            internalShellOutputReader?.close()
+        } catch (e: IOException) { /* ignore */ }
+        internalShellOutputReader = null
+
+        shellChannel?.disconnect()
+        shellChannel = null
+        session?.disconnect()
+        session = null
+
+        // sessionScope is cancelled and recreated in connect() or destroy()
     }
 
     fun disconnect() {
         listener.onStatusChanged(SshStatus.DISCONNECTING)
         listener.onLogOutput("Disconnecting...")
-        try {
-            shellOut?.close()
-            shellIn?.close()
-            out?.close() // Close the PipedOutputStream connected to terminalInputStream
-            // terminalInputStream.close() // This will be closed by out.close()
 
-            shellChannel?.disconnect()
-            session?.disconnect()
-        } catch (e: Exception) {
-            listener.onLogOutput("Exception during disconnect: ${e.message}")
-        } finally {
-            shellChannel = null
-            session = null
-            shellOut = null
-            shellIn = null
-            out = null
-            // terminalInputStream = null // Re-lazy init on next connect
+        sessionScope.launch(Dispatchers.IO) { // Perform disconnect operations on IO dispatcher
+            cleanupConnectionResources()
+            // sessionScope.cancel() // Cancelling the scope that runs this coroutine can be tricky.
+                                 // Let destroy() or new connect() handle final scope cancellation.
 
-            sessionScope.cancel() // Cancel all coroutines in this scope
+            // Notify listeners on the main thread or appropriate context if necessary
+            // For now, direct call assuming listener can handle calls from any thread, or is main-safe.
             listener.onLogOutput("Disconnected.")
             listener.onStatusChanged(SshStatus.DISCONNECTED)
             listener.onSessionDisconnected()
         }
+        // If disconnect() is called from outside a sessionScope coroutine, then cancelling sessionScope here is fine.
+        // If called from within, it's better to let the calling coroutine complete.
+        // For simplicity, assume it's called from UI thread or a context that allows this.
+        // However, the `cleanupConnectionResources` already does most of the work.
+        // The scope itself will be cancelled by destroy() or before a new connect().
     }
 
     fun isConnected(): Boolean {
-        return session?.isConnected == true && shellChannel?.isConnected == true
+        return session?.isConnected == true && shellChannel?.isConnected == true && outputReadingJob?.isActive == true
     }
 
-    // Call this when the manager is no longer needed to clean up the coroutine scope
     fun destroy() {
-        disconnect() // Ensure everything is closed
-        sessionScope.cancel()
+        listener.onLogOutput("Destroying SshConnectionManager...")
+        disconnect() // Ensure graceful disconnect
+        sessionScope.cancel() // Cancel all coroutines
     }
 }

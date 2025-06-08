@@ -25,9 +25,28 @@
     <string name="dialog_title_add_profile">Add SSH Profile</string>
     <string name="dialog_title_edit_profile">Edit SSH Profile</string>
     <string name="re_enter_password_if_changing">Re-enter password if changing</string>
+    <string name="re_import_key_if_changing">Re-import key if changing details or key</string>
+    <string name="imported_key_name_label">Imported Key Name (from file)</string>
+
 
     <!-- For ProfileListFragment delete confirmation -->
     <string name="delete_profile_title">Delete Profile</string>
     <string name="delete_profile_confirmation_message">Are you sure you want to delete profile \'%s\'?</string>
     <string name="delete">Delete</string>
+
+    <!-- For fragment_connection.xml -->
+    <string name="select_ssh_profile">Select SSH Profile</string>
+    <string name="payload_to_inject_commands">Payload / Commands</string>
+    <string name="enter_payload_here_e_g_commands">Enter payload here (e.g., commands, one per line)</string>
+    <string name="start_connection">Start Connection</string>
+    <string name="stop_connection">Stop Connection</string>
+    <string name="status_connecting">Status: CONNECTING</string>
+    <string name="status_connected">Status: CONNECTED</string>
+    <string name="status_authenticated">Status: AUTHENTICATED</string>
+    <string name="status_channel_open">Status: CHANNEL OPEN</string>
+    <string name="status_disconnecting">Status: DISCONNECTING</string>
+    <string name="status_disconnected">Status: DISCONNECTED</string>
+    <string name="status_error">Status: ERROR</string>
+    <string name="send_payload_or_stop">Send Payload / Stop</string>
+    <string name="no_ssh_profiles_found">No SSH profiles found</string>
 </resources>
