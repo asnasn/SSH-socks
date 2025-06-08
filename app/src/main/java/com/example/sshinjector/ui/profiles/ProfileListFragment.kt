@@ -43,11 +43,8 @@ class ProfileListFragment : Fragment() {
     private fun setupRecyclerView() {
         profileAdapter = SSHProfileAdapter(
             onProfileClick = { profile ->
-                // TODO: Navigate to main connection screen with this profile (Step 6)
-                Toast.makeText(context, "Selected profile: ${profile.profileName} (ID: ${profile.id})", Toast.LENGTH_SHORT).show()
-                // Example for future:
-                // val action = ProfileListFragmentDirections.actionProfileListFragmentToConnectionFragment(profile.id)
-                // findNavController().navigate(action)
+                val action = ProfileListFragmentDirections.actionProfileListFragmentToConnectionFragment(profile.id)
+                findNavController().navigate(action)
             },
             onEditClick = { profile ->
                 // Navigate to AddEditProfileDialog with the profile's ID using Safe Args

@@ -3,26 +3,40 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/nav_graph"
-    app:startDestination="@id/profileListFragment"> <!-- Updated startDestination -->
+    app:startDestination="@id/profileListFragment">
 
     <fragment
-        android:id="@+id/profileListFragment" <!-- Updated ID -->
+        android:id="@+id/profileListFragment"
         android:name="com.example.sshinjector.ui.profiles.ProfileListFragment"
         android:label="SSH Profiles"
         tools:layout="@layout/fragment_profile_list" >
         <action
-            android:id="@+id/action_profileListFragment_to_addEditProfileDialog" <!-- Updated ID -->
+            android:id="@+id/action_profileListFragment_to_addEditProfileDialog"
             app:destination="@id/addEditProfileDialog" />
+        <action
+            android:id="@+id/action_profileListFragment_to_connectionFragment"
+            app:destination="@id/connectionFragment" />
     </fragment>
 
     <dialog
-        android:id="@+id/addEditProfileDialog" <!-- Updated ID -->
+        android:id="@+id/addEditProfileDialog"
         android:name="com.example.sshinjector.ui.profiles.AddEditProfileDialog"
-        android:label="@string/dialog_title_add_profile" <!-- Use string resource -->
+        android:label="@string/dialog_title_add_profile"
         tools:layout="@layout/dialog_add_edit_profile" >
         <argument
             android:name="profileId"
             app:argType="long"
             android:defaultValue="-1L" />
     </dialog>
+
+    <fragment
+        android:id="@+id/connectionFragment"
+        android:name="com.example.sshinjector.ui.connection.ConnectionFragment"
+        android:label="SSH Connection"
+        tools:layout="@layout/fragment_connection">
+        <argument
+            android:name="profileId"
+            app:argType="long"
+            android:defaultValue="-1L" /> <!-- -1L means no specific profile pre-selected -->
+    </fragment>
 </navigation>
