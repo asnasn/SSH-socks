@@ -1,0 +1,33 @@
+<resources>
+    <string name="app_name">SSHInjectorApp</string>
+
+    <!-- For item_ssh_profile.xml -->
+    <string name="profile_icon_desc">Profile Icon</string>
+    <string name="edit_profile_desc">Edit Profile</string>
+    <string name="delete_profile_desc">Delete Profile</string>
+
+    <!-- For fragment_profile_list.xml -->
+    <string name="no_profiles_yet_add_one">No SSH profiles yet. Tap '+' to add one.</string>
+    <string name="add_new_profile">Add new SSH profile</string>
+
+    <!-- For dialog_add_edit_profile.xml -->
+    <string name="profile_name">Profile Name</string>
+    <string name="ssh_host_ip">SSH Host/IP Address</string>
+    <string name="ssh_port">SSH Port</string>
+    <string name="username">Username</string>
+    <string name="authentication_method">Authentication Method</string>
+    <string name="password">Password</string>
+    <string name="ssh_key_path">SSH Key</string> <!-- Simplified for now -->
+    <string name="ssh_key_alias_in_keystore_optional">SSH Key Alias (for imported key)</string>
+    <string name="import_private_key">Import Private Key</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="dialog_title_add_profile">Add SSH Profile</string>
+    <string name="dialog_title_edit_profile">Edit SSH Profile</string>
+    <string name="re_enter_password_if_changing">Re-enter password if changing</string>
+
+    <!-- For ProfileListFragment delete confirmation -->
+    <string name="delete_profile_title">Delete Profile</string>
+    <string name="delete_profile_confirmation_message">Are you sure you want to delete profile \'%s\'?</string>
+    <string name="delete">Delete</string>
+</resources>
