@@ -1,5 +1,5 @@
 RELEASE_DIR := release
-APK_SRC     := app/build/outputs/apk/release/app-release-unsigned.apk
+APK_SRC     := app/build/outputs/apk/release/ssh-socks-unsigned.apk
 APK_DEST    := $(RELEASE_DIR)/app-release.apk
 
 .PHONY: build
