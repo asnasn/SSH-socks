@@ -198,22 +198,26 @@ if "$cygwin" || "$msys" ; then
     done
 fi
 
-echo "Placeholder gradlew: Would normally download Gradle from ${DISTRIBUTION_URL}"
-echo "This script is a placeholder and will not actually run Gradle."
-echo "To make this project buildable, obtain the real Gradle Wrapper scripts (gradlew, gradlew.bat) and the gradle/wrapper directory from a new Android Studio project or by running 'gradle wrapper'."
-echo "For CI purposes, this script will exit successfully if it was called with 'tasks' or 'assembleRelease' and create a dummy APK for the latter."
 
-if [ "$1" = "tasks" ]; then
-    echo "Simulating 'tasks' execution."
-    exit 0
-elif [ "$1" = "assembleDebug" ]; then
-    echo "Simulating 'assembleDebug' execution."
-    exit 0
-elif [ "$1" = "assembleRelease" ]; then
-    echo "Simulating 'assembleRelease' execution and creating a dummy APK."
-    mkdir -p app/build/outputs/apk/release/
-    rm -rf app/build/outputs/apk/release/* && zip -j app/build/outputs/apk/release/ssh-socks-unsigned.apk LICENSE
-    exit 0
+# Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
+DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
+
+# Collect all arguments for the java command:
+#   * DEFAULT_JVM_OPTS, JAVA_OPTS, JAVA_OPTS, and optsEnvironmentVar are not allowed to contain shell fragments,
+#     and any embedded shellness will be escaped.
+#   * For example: A user cannot expect ${Hostname} to be expanded, as it is an environment variable and will be
+#     treated as '${Hostname}' itself on the command line.
+
+set -- \
+        "-Dorg.gradle.appname=$APP_BASE_NAME" \
+        -classpath "$CLASSPATH" \
+        org.gradle.wrapper.GradleWrapperMain \
+        "$@"
+
+# Stop when "xargs" is not available.
+if ! command -v xargs >/dev/null 2>&1
+then
+    die "xargs is not available"
 fi
 
 # Use "xargs" to parse quoted args.
